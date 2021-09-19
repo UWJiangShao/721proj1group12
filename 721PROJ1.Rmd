@@ -1,0 +1,114 @@
+---
+title: "721PROJ1"
+author: "Kira Shao"
+date: "9/18/2021"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Background
+
+Women with active ovarian cancer have chemotherapy appointments every two to three weeks. Physicians are concerned about patients visiting the emergency department (ED) between their chemo appointments and want to be able to predict at the end of the chemo appointment if the patient likely visit the ED or to be hospitalized (also called “Unanticipated hospital admission” or UHA) before the next appointment. The clinical team enlists the help of a biostatistician to create a predictive model. 
+
+
+
+### Import both datasets
+```{r echo=TRUE}
+patient_data <- read.csv('Patient Level Data.csv')
+encounter_data <- read.csv('Encounter Level Data.csv')
+```
+
+### Merge the patient level data into the encounter level data
+```{r echo=TRUE, results= FALSE}
+merged_table <- dplyr::left_join(patient_data, encounter_data, by = "MRN")
+write.csv(merged_table, file = "merge.csv")
+```
+
+### This dataset will be your base "analytic dataset." Write a paragraph describing ### your dataset, including:
+– Granularity (what does each row represent?)  
+A:each row in this table represent a single encounter for each patient.  
+– Dimensions (how many variables, how many rows?)  
+A:According to the data, merged table has 550 objects and 14 variables  
+– General description of variables  
+A:There are 14 variables in the analytic data set (with one duplicated MCN)
+patient data provided 8 variables that are duplicated for every encounter
+encounter data have 7 variables, each row is unique.
+
+### Address any data cleaning issues you see (missing data, implausible data, etc.)  
+1. There are outlier data such as -999 in BMI  
+2. There are "NA" data entry that might jeopardize calculating process
+
+### Round the temperature variable to one decimal place.  
+```{r echo=TRUE}
+round(merged_table$temp, digits = 1)
+```
+
+### Re-categorize WBC into a categorical variable with the following levels:
+```{r echo=TRUE}
+
+merged_table$WBC[merged_table$WBC < 3.2] = "Low (<3.2)"
+merged_table$WBC[merged_table$WBC >= 3.2 | merged_table$WBC <= 9.8] = "Normal (3.2-9.8)"
+merged_table$WBC[merged_table$WBC >9.8] = "High (>9.8)"
+merged_table$WBC[merged_table$WBC == 'NA'] = "Not Taken"
+```
+### Create a table of the categorical WBC variable
+```{r eval=FALSE, include=FALSE, echo = TRUE}
+WBC_table = xtabs(~ merged_table$WBC, data = merged_table)
+```
+
+### Preliminary research suggests elevated temperature is predictive of ED/UHA. Create a table of MRNs, dates, and temperatures where the temperature is >100. Organize by MRN.  
+```{r}
+temp100 <- filter(merged_table, merged_table$temp > 100)
+```
+
+### Calculate & print a table of the mean BMI (over all encounters) for the following MRNs: CI6950, IW9164, HJ8458, & XE4615.
+```{r echo=TRUE}
+CI6950 <- dplyr::filter(merged_table, merged_table$MRN == "CI6950")
+BMI_6950 <- dplyr::select(CI6950, contains("BMI"))
+BMI_6950_mean <- mean(BMI_6950)
+
+IW9164 <- dplyr::filter(merged_table, merged_table$MRN == "IW9164")
+BMI_9164 <- dplyr::select(IW9164, contains("BMI"))
+BMI_9164_mean <- mean(BMI_9164)
+
+HJ8458 <- dplyr::filter(merged_table, merged_table$MRN == "HJ8458")
+BMI_8458 <- dplyr::select(HJ8458, contains("BMI"))
+BMI_8458_mean <- mean(BMI_8458)
+
+XE4615 <- dplyr::filter(merged_table, merged_table$MRN == "XE4615")
+BMI_4615 <- dplyr::select(XE4615, contains("BMI"))
+BMI_4615_mean <- mean(BMI_6950)
+
+##kable(BMI_6950_mean, BMI_9164_mean, BMI_8458_mean, BMI_4615_mean)
+```
+
+
+### Create a table showing how many hospital encounters occurred each year.  
+```{r echo=TRUE}
+date <- as.Date(merged_table$contact_date, 
+                format = "%m/%d/%y")
+
+##encounter_date <- mdy(merged_table$contact_date)
+
+```
+
+
+### Calculate the age of each patient at the start of the cohort (2019-09-01).  
+
+
+### Write a sentence or two that includes the summary statistics of the cohort ages (median, mean, sd, min, max)  
+
+
+### Create & print a table of the counts & percentages of race, ethnicity,financial class, hypertension, congestive heart failure, and diabetes.
+
+
+
+
+
+
+
+
+

@@ -15,6 +15,9 @@ This is an R Markdown document. Markdown is a simple formatting syntax for autho
 
 When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
 
+
+
+
 ```{r}
 library(tidyverse)
 library(dplyr)
@@ -22,6 +25,9 @@ library(lubridate)
 library(knitr)
 library(flextable)
 ```
+
+
+## Merge data
 
 ```{r}
 #import patient data
@@ -33,7 +39,25 @@ encounterlevel<-read.csv("/Users/wangziyi/Desktop/721/project1/Encounter\ Level\
 #merge two data set
 total<-merge.data.frame(encounterlevel,patientlevel,by="MRN")
 ```
-There are 550 rows and 14 variables in this dataset. The variables include "MRN","contact_data","enc_type","temp","distress_score","WBC","BMI.r","DOB","race","finnacialclass","ethnicity","hypertension","CHF","diabetes"
+## Data Discription
+
+*There are 550 rows and 14 variables in this dataset. The variables include:
++"MRN"(patient number),  
++"contact_data"(the date of encounter), 
++"enc_type"(the type of encounter, categorical variable), 
++"temp"(the temperature of patient at each encounter, numerical variable), 
++"distress_score"(score of patients' phycological distress，categorical variable), 
++"WBC"(white blood cell, numerical variable),
++"BMI.r"(BMI score, numerical variable) , 
++"DOB"(Date of birth), 
++"race"(Race of the patient, categorical variable), 
++"finacialclass"(finacial class, categorical variable),
++"ethnicity"(ethnicity, categorical variable),
++"hypertension"(have hypertension or not, categorical variable),
++"CHF"(have congestive heart failure or not, categorical variable),
++"diabetes(have diabete or not, categorical variable)"
+
+## Data issue
 ```{r}
 #address data issue
 total$WBC[is.na(total$WBC)]<-NA
@@ -44,9 +68,24 @@ total$BMI.r[is.na(total$BMI.r)]<-NA
 total$DOB[total$DOB=='7/22/1889']<-NA
 total$BMI.r[total$BMI.r=='-999']<-NA
 
-#round temperature variable to one decimal
-total$temp<-round(total$temp,1)
+```
 
+
+
+```{r}
+#distinct patient from the total
+
+#patient_distinct<-total%>% distinct(MRN, .keep_all =TRUE)
+
+
+#round temperature variable to one decimal
+#total$temp<-round(total$temp,1)
+total<- total %>% mutate(temp_round = round(temp, 1)) %>% 
+  relocate(temp_round, .after = temp)
+```
+
+
+```{r}
 #Re-categorize WBC into a categorical variable
 WBC_Grps=NA
 WBC_Grps[total$WBC<3.2&is.na(total$WBC)==F] = "Low"
@@ -54,13 +93,25 @@ WBC_Grps[3.2<=total$WBC & total$WBC<=9.8&is.na(total$WBC)==F] = "Normal"
 WBC_Grps[9.8<total$WBC&is.na(total$WBC)==F] = "High"
 WBC_Grps[is.na(total$WBC)] = "Not_Taken"
 WBC<-data.frame(total$MRN, WBC_Grps)
-head(WBC)
-table(WBC$WBC_Grps)
+flextable(head(WBC))
+```
+
+```{r}
+Cou_WBC_Grps<-as.data.frame(table(WBC$WBC_Grps))
+flextable(Cou_WBC_Grps)
+```
+
+```{r}
 #Create a table of MRNs, dates, and temperatures where the temperature is >100. Organize by MRN
 
 
 UHA1<-total%>% select(MRN,contact_date,temp)
 UHA<-UHA1%>% filter(temp>100)
+flextable(UHA)
+
+```
+
+```{r}
 
 #Calculate & print a table of the mean BMI
 mean<-c(mean(total$BMI.r[total$MRN=="CI6950"],na.rm =TRUE ),
@@ -76,10 +127,17 @@ BMI
 ```{r}
 #Create a table showing how many hospital encounters occurred each year
 
-HE<-total%>%filter(total$enc_type=="Hospital Encounter")
-Date_year<-format(as.Date(HE$contact_date, format ="%m/%d/%Y"), "%Y")
-table(Date_year)
+Hosp_Encou<-total%>%filter(total$enc_type=="Hospital Encounter")
 
+#Date_year<-format(as.Date(Hosp_Encou$contact_date, format ="%m/%d/%Y"), "%Y")
+Date_year<-format(as.Date(Hosp_Encou$contact_date, format ="%m/%d/%Y"), "%Y")
+Cou_Hosp_Encou<-as.data.frame(table(Date_year))
+flextable(Cou_Hosp_Encou)
+#table(Date_year)
+```
+
+
+```{r}
 #Calculate the age of each patient at the start of the cohort
 
 birth_date <- as.Date(total$DOB, format ="%m/%d/%Y")
@@ -100,69 +158,64 @@ AGE_selected<-AGE %>% distinct(MRN, .keep_all =TRUE)
 
 summary.data.frame(AGE_selected)
 
-sd(AGE_selected$age,na.rm =TRUE)
+SD<-sd(AGE_selected$age,na.rm =TRUE)
+
 ```
-AGE<-data.frame(total$MRN, trunc((birth_date %--% x_date) / years(1)))
+
 Min.   : 20.0  Max.   :71.00    Median : 45.0  Mean   :42.96  sd:14.77182
 
 ```{r}
 #Create & print a table of the counts & percentages of race, ethnicity, financial class, hypertension, congestive heart failure, and diabetes.
 
-Race<-total %>%
+patient_distinct<-total%>% distinct(MRN, .keep_all =TRUE)
+  
+Race<-patient_distinct%>%
     count(race) %>% 
-    mutate(percent = n/sum(n)) 
+    mutate(percent = n/sum(n)*100)
 Race=cbind(c("race"),Race)
-names(Race) <- c("type","subtype", "count", "precent")  
+names(Race) <- c("type","categories", "count", "precent%")  
 
-Ethnicity<-total%>%
+Ethnicity<-patient_distinct%>%
     count(ethnicity) %>% 
-    mutate(percent = n/sum(n)) 
+    mutate(percent = n/sum(n)*100) 
 Ethnicity=cbind(c("ethnicity"),Ethnicity)
-names(Ethnicity) <- c("type","subtype", "count", "precent")  
+names(Ethnicity) <- c("type","categories", "count", "precent%")  
 
-Financial_Class<-total%>%
+Financial_Class<-patient_distinct%>%
     count(financialclass) %>% 
-    mutate(percent = n/sum(n)) 
+    mutate(percent = n/sum(n)*100) 
 Financial_Class=cbind(c("financialclass"),Financial_Class)
-names(Financial_Class) <- c("type","subtype", "count", "precent") 
+names(Financial_Class) <- c("type","categories", "count", "precent%") 
 
-Hypertension<-total %>%
+Hypertension<-patient_distinct %>%
     count(hypertension) %>% 
-    mutate(percent = n/sum(n)) 
+    mutate(percent = n/sum(n)*100) 
 Hypertension=cbind(c("hypertension"),Hypertension)
-names(Hypertension) <- c("type","subtype", "count", "precent") 
+names(Hypertension) <- c("type","categories", "count", "precent%") 
 
-chf<-total %>%
+chf<-patient_distinct %>%
     count(CHF) %>% 
-    mutate(percent = n/sum(n)) 
+    mutate(percent = n/sum(n)*100) 
 chf=cbind(c("CHF"),chf)
-names(chf) <- c("type","subtype", "count", "precent") 
+names(chf) <- c("type","categories", "count", "precent%") 
 
-Diabetes<-total %>%
+Diabetes<-patient_distinct %>%
     count(diabetes) %>% 
-    mutate(percent = n/sum(n)) 
+    mutate(percent = n/sum(n)*100) 
 Diabetes=cbind(c("diabetes"),Diabetes)
-names(Diabetes) <- c("type","subtype", "count", "precent")
+names(Diabetes) <- c("type","categories", "count", "precent%")
 
 TABLE<-flextable(bind_rows(Race,Ethnicity,Financial_Class,Hypertension,chf,Diabetes))
 TABLE
-#histogram of the distress score
-hist(total$distress_score)
-
 ```
 
-
-
-
-
-## Including Plots
-
-
-You can also embed plots, for example:
+## Histogram 
 
 ```{r}
 #histogram of the distress score
 hist(total$distress_score)
+
 ```
+
 
 Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.

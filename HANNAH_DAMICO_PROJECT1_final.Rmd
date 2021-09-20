@@ -1,0 +1,470 @@
+---
+title: "Patient and Encounter Level Analysis"
+subtitle: "Project 1 - 721"
+author: "Hannah Damico"
+date: "9/12/2021"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(here)
+library(tidyverse)
+library(pastecs)
+library(knitr)
+library(kableExtra)
+library(flextable)
+```
+
+# Import Datasets    
+
+```{r, message=FALSE}
+patient.df <- read_csv("Patient Level Data.csv", na = c("NA", " ", -999))
+#View(patient.df)
+
+encounter.df <- read_csv("Encounter Level Data.csv", na = c("NA", " ", -999))
+#View(encounter.df)
+```
+
+
+
+# Merge Data Sets  
+
+Datasets have been merged by their common column of MRN, 
+
+```{r}
+merged.df <- right_join(patient.df,encounter.df, by = "MRN")
+head(merged.df)
+```
+## Create a duplicate data frame  
+In order to preserve the original merged data frame, a duplicate will be created and further used for any variable adjustments.
+
+```{r}
+frame1 <- merged.df
+```
+
+
+
+# Description of Data Set  
+
+## Granularity  
+
+Each row of this data set is organized with respect to the individual patient medical record number. Since there exist a variety of contact dates for each patient, there are repeated rows referencing the same patient with differing contact dates.
+
+## Dimensions  
+```{r}
+dim(frame1)
+```
+
+This dataset contains 550 observations, or rows, and 14 columns of variables. 
+
+
+## Variable Description  
+
+```{r message=FALSE}
+str(frame1, give.attr = FALSE)
+```
+
+
+There are 14 total variables contained in this dataset which describe 550 observations (rows). Some character and numeric variables can be better interpreted as factors such as *race*, *financialclass*, *ethnicity*, *hypertension*, *CHF*, and *diabetes*. Patients are identified using unique character Medical Record Numbers (*MRN*) which separate patient information into unique rows. There are three binary factors (*hypertension*, *CHF*, and *diabetes*) which designate patients as "N" (No) or "Y" (Yes) if they are identified as having hypertension, CHF, diabetes or not.Patient encounter is defined as any contact a patient has with their medical care team and is split into "Office visit" and "Hospital Encounter". Variables *contact_date* and *DOB* are currently understood as characters, but are later identified as dates where *contact_date* describes the date of encounter for patients and *DOB* describes patient date of birth. The *race* variable is divided into three categories, "Black", "Other" and "White", while the *ethnicity* variable accounts for "Hispanic" and "non-Hispanic" patients. The financial class of patients is broken into two categories of "Private" or "Medicare" in *financialclass*. The *temp* variable records the Fahrenheit temperature of patients at every encounter. The *WBC* variable measures the number of white blood cells in the patient at that particular contact date and is measured in thousands per cubic milliliter of blood (K/uL). The rounded body mass index of patients is identified as a numeric value in *BMI.r*. Patient distress level is recorded in the *distress_score* variable on a scale from 0 to 6 as a discrete value. 
+
+
+
+# Cleaning the data  
+
+This section includes the appropriate adjustments of variables into factors as needed as well as the viewing of NA values.
+
+## Remove implausible values
+
+The *BMI.r* variables contains implausible variables for BMI of greater than 300. These values have been set to NA. Similarly, the *DOB* variable contains the date of birth for a patient in the 19th century and has therefore been set as NA for its implausibility. 
+
+```{r}
+frame1$BMI.r[frame1$BMI.r >  300 ] <- NA
+
+
+frame1$DOB[frame1$DOB == "7/22/1889"] <- NA # this removes the dob from the 1800s
+
+```
+
+
+## Factor Adjustments  
+
+A total of 7 variables have been adjusted to be analyzed as factors. This adjustment was made based on the structure of the variables themselves being understood ordinally.
+
+```{r}
+
+frame1$race <- as.factor(frame1$race)
+
+frame1$financialclass <- as.factor(frame1$financialclass)
+
+frame1$ethnicity <- as.factor(frame1$ethnicity)
+
+frame1$hypertension <- as.factor(frame1$hypertension)
+
+frame1$CHF <- as.factor(frame1$CHF)
+
+frame1$diabetes <- as.factor(frame1$diabetes)
+
+frame1$enc_type <- as.factor(frame1$enc_type)
+
+```
+
+
+
+## Missing Data  
+
+The amount of missing data in this data set does not greatly affect the overall analysis since there remains a large amount of observations without the missing data; therefore missing values will not be removed until further analyses. 
+
+```{r}
+#apply(is.na(frame1), 2, which) # Find location of NA by columns
+```
+
+There are `r sum(is.na(frame1))` total NA values in this data frame
+```{r}
+sum(is.na(frame1))
+```
+
+
+
+
+# Round the Temperature Variable  
+
+The *temp* variable measuring the temperature of the patient on a given contact date is rounded to one decimal and named in a new variable as *temp_rounded* to preserve the original variable values. 
+
+```{r}
+frame1 <- frame1 %>% mutate(temp_rounded = round(temp, 1))
+frame1 %>% select(temp_rounded) %>% head
+```
+
+
+# Recategorize the WBC variable  
+
+The WBC variable will be categorized into a factor variable with four levels:  
+
+* Low (WBC < 3.2)  
+* Normal (WBC between 3.2 and 9.8)  
+* High (WBC > 9.8)  
+* Not Taken (NA values) 
+
+Note: A secondary variable *WBC Range* was also created to define the four levels listed above by their WBC measurement interval
+
+```{r}
+frame1 <- frame1 %>% mutate(WBC_status = case_when( WBC < 3.2 ~ "Low",
+                                                    WBC >= 3.2 & WBC <= 9.8 ~ "Normal",
+                                                    WBC > 9.8 ~ "High",
+                                                    is.na(WBC) ~ "Not Taken"))
+
+#frame1$WBC_status[is.na(frame1$WBC_status)] <- "Not Taken"
+
+#frame1 %>% select(WBC_status)
+
+
+```
+
+```{r}
+frame1 <- frame1 %>% dplyr::mutate(`WBC Range` = case_when(WBC < 3.2 ~ "< 3.2 K/uL",
+                                      WBC >= 3.2 & WBC <= 9.8 ~ "3.2 - 9.8 K/uL",
+                                      WBC > 9.8 ~ "> 9.8 K/uL",
+                                      is.na(WBC) ~ "NA"))
+```
+
+
+
+```{r, ft.align = "center"}
+WBC_tab <- frame1 %>% select(WBC_status, `WBC Range`) %>%  group_by(WBC_status, `WBC Range`) %>% count(name = "Count") %>%  rename("WBC Status" = "WBC_status")
+#WBC_tab
+theme_vanilla(flextable(WBC_tab)) %>% color(~ `WBC Status` == "High", color = "darkred") %>% set_caption("WBC Status in Patients", style = "Table Caption")
+
+```
+
+<br>
+
+# Create a table of MRNs, dates and temperatures where the temperature is greater than 100  
+
+The *fever_range* variable was created using fever range information found on the Kinsa Health website.
+https://kinsahealth.com/post/fever-ranges-by-different-methods
+
+```{r}
+frame2 <- frame1
+#based on oral measurements
+frame2 <- frame2 %>% dplyr::mutate(fever_range = case_when(temp >= 100 & temp <= 101.5 ~ "Mild",
+                                          temp > 101.5 & temp <= 102.5 ~ "Moderate",
+                                          temp > 102.5 ~ "High"))
+
+```
+
+```{r}
+#Create the Table
+Temp_tab <- frame2 %>% select(MRN, fever_range, temp) %>% filter(temp > 100) %>% group_by(fever_range) %>% arrange(desc(temp)) %>% rename("Fever Range" = "fever_range", "Temperature" = "temp")
+
+
+temp_flex <- qflextable((Temp_tab)) %>% color(~`Fever Range` == "High", color = "darkred", ~`Fever Range` + Temperature + MRN) 
+
+temp_flex <- temp_flex %>% footnote(i = 1, j = 2, value = as_paragraph("Fever range information retrieved from Kinsa Health"), ref_symbols = c("1"), part = "header") %>% italic(italic = TRUE, part = "footer")
+
+align(temp_flex, i = NULL, j = 1:3, "center", part = "all") %>% align_text_col("left", footer = TRUE) %>% set_caption("Elevated Patient Temperatures", style = "Table Caption") 
+
+```
+
+\pagebreak
+
+# Calculate and print a table of the mean of BMI for the following MRNs: **CI6950**, **IW9164**, **HJ8458**, **XE4615**   
+
+
+```{r}
+mean_BMIs <- frame1 %>% select(MRN, BMI.r) %>% filter(MRN == "CI6950" |
+                                                        MRN == "IW9164" |
+                                                        MRN == "HJ8458" |
+                                                        MRN == "XE4615") %>% group_by(MRN) %>% summarize(Mean = round(mean(BMI.r, na.rm = TRUE), 3)) %>% arrange(desc(Mean))
+
+theme_vanilla(flextable(mean_BMIs)) %>% set_caption("Mean BMI Values")
+
+```
+
+
+
+# Create a table showing how many hospital encounters occured each year
+
+The code below formats the contact_date variable in the data set and extracts the year. From there, this vector has been saved as *years* and appended to the frame1.
+
+```{r}
+
+years <- format(as.Date(frame1$contact_date, format="%m/%d/%Y"),"%Y")
+
+frame1 <- cbind(frame1, years)
+
+```
+
+
+
+## Create the table
+```{r}
+hosp_counts <- frame1 %>%  select(enc_type, years) %>% filter(enc_type == "Hospital Encounter") %>% group_by(years, enc_type) %>% count %>% ungroup
+
+hosp_counts <- hosp_counts %>% rename("Years" = "years", "Count" = "n", "Encounter Type" = "enc_type") 
+
+hosp_counts_table <- hosp_counts %>% select(-"Encounter Type") %>% arrange(desc(Years))
+
+ 
+theme_vanilla(flextable(hosp_counts_table)) %>% set_caption("Yearly Frequency of Hospital Encounters")
+```
+
+<br> 
+
+# Calculate the age of each patient at the start of the cohort (2019-09-01)
+
+The Age variable has been created and added firstly to the dummy frame *frame_date* to ensure that the variable was in the proper format without making changes to the original dataset. Age is measured in years and the floor function has been applied in order to round Age down.
+
+```{r, ft.align = "center"}
+years_DOB <- format(as.Date(frame1$DOB, format="%m/%d/%Y"),"%Y")
+
+#years_DOB
+
+#frame1 <- cbind(frame1, years_DOB)
+
+
+frame_date <- frame1
+
+frame_date$DOB <- as.Date(frame_date$DOB, format = "%m/%d/%Y")
+
+#frame_date %>% select(DOB)
+
+cohort_start <- as.Date("01/09/2019", format = "%m/%d/%Y")
+#cohort_start
+
+
+Age <- floor((cohort_start - frame_date$DOB)/365)
+
+
+Age <- parse_number(as.character(Age))
+
+frame_date <- cbind(frame_date, Age)
+#head(frame_date)
+
+frame1 <- cbind(frame1, Age)
+
+#frame1 %>% select(-Age) Because we ran things 2x, it produced 2 identical Age columns, here we remove one
+
+#frame1$Age[frame1$Age == 129] <- NA
+
+#frame1 %>% select(Age) %>% arrange(desc(Age)) # check, no more 129 age
+
+glimpse_date <- frame_date %>% select(MRN, Age) %>% unique() %>% head()
+
+flextable(glimpse_date) %>% set_caption("Glimpse of Cohort Ages", style = "Table Caption")
+ 
+```
+
+
+## Plot to view the distribution of ages within the cohort
+
+```{r, warning=FALSE, message=FALSE}
+frame1 %>% ggplot() + geom_freqpoly(aes(Age)) + theme_bw() + ggtitle("Distribution of Patient Ages in Cohort") + scale_x_continuous(breaks = c(seq(15, 80, by = 5)))
+```
+
+\pagebreak
+
+## Write a sentence or two that includes the summary statistics of the cohort ages (median, mean, sd, min, max)
+
+We can infer that there does not exist a notable skew in the distribution of cohort ages since the mean and median ages are so similar at `r floor(mean(frame1$Age))` and `r floor(median(frame1$Age))` years, respectively. With a standard deviation of `r floor(sd(frame1$Age))`, this data likely has moderate dispersion due to a wide range of ages.
+
+```{r}
+sum.stats <- frame1 %>% select(Age) %>% summarise(Mean = floor(mean(Age, na.rm = TRUE)), Median = median(Age, na.rm = TRUE), `Standard Deviation` = floor(sd(Age, na.rm = TRUE)), Min = min(Age, na.rm = TRUE), Max = max(Age, na.rm = TRUE))
+theme_vanilla(qflextable(sum.stats)) %>% align(i = NULL, j = 1:5, "center", part = "all")
+```
+
+
+# Create and print a table of the counts & percentages of diabetes, ethnicity, financial class, hypertension, congestive heart failure, and diabetes. 
+
+
+##Create a frame of distinct MRN values
+
+```{r}
+distinct_frame <- frame1 %>% distinct(MRN, .keep_all = TRUE)
+```
+
+
+
+## Race
+```{r}
+
+race_count <- distinct_frame %>% group_by(race) %>% summarise(Count = n()) %>% rename("Race" = "race")
+
+
+race_prop <- 100*round(prop.table(table(distinct_frame$race)),3)
+
+race_frame <- cbind(race_count, race_prop)
+
+race_frame <- race_frame %>%  select(-Var1)  %>% rename("Percentage" = "Freq")
+race_frame$Variable <- c(rep("Race", times = nrow(race_frame)))
+race_frame
+```
+
+
+## Ethnicity
+
+```{r}
+ethnic_count <- distinct_frame %>% group_by(ethnicity) %>% summarise(Count = n()) %>% rename("Ethnicity" = "ethnicity")
+
+
+ethnic_prop <- 100*round(prop.table(table(distinct_frame$ethnic)),3)
+
+ethnic_frame <- cbind(ethnic_count, ethnic_prop)
+
+ethnic_frame <- ethnic_frame %>%  select(-Var1)  %>% rename("Percentage" = "Freq")
+ethnic_frame$Variable <- c(rep("Ethnicity", times = nrow(ethnic_frame)))
+ethnic_frame
+```
+
+## Financial Class
+
+```{r}
+
+fin_class_count <- distinct_frame %>% group_by(financialclass) %>% summarise(Count = n()) %>% rename("Financial Class" = "financialclass")
+
+
+fin_class_prop <- 100*round(prop.table(table(distinct_frame$financialclass)),3)
+
+fin_class_frame <- cbind(fin_class_count, fin_class_prop)
+
+fin_class_frame <- fin_class_frame %>%  select(-Var1)  %>% rename("Percentage" = "Freq")
+fin_class_frame$Variable <- c(rep("Financial Class", times = nrow(fin_class_frame)))
+
+fin_class_frame
+```
+
+
+## Hypertension
+```{r}
+hypertension_count <- distinct_frame %>% group_by(hypertension) %>% summarise(Count = n()) %>% rename("Hypertension" = "hypertension")
+
+
+hypertension_prop <- 100*round(prop.table(table(distinct_frame$hypertension)),3)
+
+hypertension_frame <- cbind(hypertension_count, hypertension_prop)
+
+hypertension_frame <- hypertension_frame %>%  select(-Var1)  %>% rename("Percentage" = "Freq")
+
+hypertension_frame$Variable <- c(rep("Hypertension", times = nrow(hypertension_frame)))
+hypertension_frame
+```
+
+
+## CHF
+
+```{r}
+CHF_count <- distinct_frame %>% group_by(CHF) %>% summarise(Count = n()) %>% rename("CHF" = "CHF")
+
+
+CHF_prop <- 100*round(prop.table(table(distinct_frame$CHF)),3)
+
+CHF_frame <- cbind(CHF_count, CHF_prop)
+
+CHF_frame <- CHF_frame %>%  select(-Var1)  %>% rename("Percentage" = "Freq")
+CHF_frame$Variable <- c(rep("CHF", times = nrow(CHF_frame)))
+CHF_frame
+```
+
+
+
+## Diabetes
+```{r}
+diabetes_count <- distinct_frame %>% group_by(diabetes) %>% summarise(Count = n()) %>% rename("Diabetes" = "diabetes")
+
+
+diabetes_prop <- 100*round(prop.table(table(distinct_frame$diabetes)),3)
+
+diabetes_frame <- cbind(diabetes_count, diabetes_prop)
+
+diabetes_frame <- diabetes_frame %>%  select(-Var1)  %>% rename("Percentage" = "Freq")
+diabetes_frame$Variable <- c(rep("Diabetes", times = nrow(diabetes_frame)))
+diabetes_frame
+```
+
+
+
+## Diversity frame
+
+```{r}
+header <- c("Variable", "Count", "Percentage")
+Race <- levels(distinct_frame$race)
+Ethnicity <- levels(distinct_frame$ethnicity)
+`Financial Class` <- levels(distinct_frame$financialclass)
+Hypertension <- levels(distinct_frame$hypertension)
+CHF <- levels(distinct_frame$CHF)
+Diabetes <- levels(distinct_frame$diabetes)
+
+div_frame <- data.frame()
+```
+
+## Create Patient Diversity Table
+
+```{r}
+Count <- c(" ", race_frame$Count, sum(race_count$Count), " ",ethnic_frame$Count, sum(ethnic_count$Count), " ", fin_class_frame$Count, sum(fin_class_count$Count), " ",  hypertension_frame$Count, sum(hypertension_count$Count)," ", CHF_frame$Count, sum(CHF_count$Count)," ", diabetes_frame$Count, sum(diabetes_count$Count))
+
+Percentage <- c(" ", race_frame$Percentage, sum(race_frame$Percentage)," ", ethnic_frame$Percentage, sum(ethnic_frame$Percentage), " ", fin_class_frame$Percentage, sum(fin_class_frame$Percentage), " ", hypertension_frame$Percentage, sum(hypertension_frame$Percentage), " ", CHF_frame$Percentage, sum(CHF_frame$Percentage), " ",  diabetes_frame$Percentage, sum(diabetes_frame$Percentage))
+
+Variable <- c("Race", Race, "Total", "Ethnicity", Ethnicity,  "Total", "Financial Class", `Financial Class`,  "Total", "Hypertension", Hypertension,  "Total", "CHF", CHF,  "Total", "Diabetes", Diabetes, "Total")
+
+
+div_frame <- data.frame(cbind(Variable, Count, Percentage))
+
+Variable2 <- c("Race", "Ethnicity", "Financial Class", "Hypertension", "CHF", "Diabetes")
+
+div_table <- theme_vanilla(qflextable((div_frame))) %>%  autofit() %>% set_caption("Patient Diversity", style = "Table Caption") 
+
+
+div_table %>% bg(i = ~ Variable %in% Variable2, j = c("Variable", "Count", "Percentage" ), bg = "lightgray", part = "body")  %>% bold(i = ~ Variable %in% Variable2, j = c("Variable", "Count", "Percentage"), bold = TRUE)
+
+```
+
+#Create a histogram of Distress Score 
+
+The distribution of distress scores is slightly right skewed. The median distress score is `r median(frame1$distress_score)`.
+
+```{r}
+frame1 %>% na.omit %>% ggplot() + geom_bar(aes(as.factor(distress_score))) + ggtitle("Frequency of Experienced Distress Scores in Patients", subtitle = "Scale of 0-7") + xlab("Distress Score") + ylab("Frequency") + theme_minimal()
+```
+
+
+
